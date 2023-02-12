@@ -2,7 +2,7 @@
 Assembly interpreter for Pic10 Microcontrollers
 
 ### Goals 
-The goal of this project is to have a Pic10f202/206/3xx microcontroller (or any with 512 words of FLASH memory) read an assembly instruction over I2C and correctly interpret it
+The goal of this project is to have a Pic10f202/206/322 microcontroller (or any with 512 words of FLASH memory) read an assembly instruction over I2C and correctly interpret it
 
 The instructions will be read from either a parent MCU or external memory chip
 
@@ -61,4 +61,4 @@ but my goal is to maintain compatibility with the existing instruction OPCODES
 
 I have written a draft program but have not tested it
 
-I will be testing first on the PIC10F206. If this is successful I will move onto the PIC10F3xx. I plan to attempt to implement Interrupt routines by storing the instructions in RAM
+I will be testing first on the PIC10F206. If this is successful I will move onto the PIC10F322. I plan to attempt to implement Interrupt routines by storing the instructions in RAM
