@@ -17,7 +17,7 @@ It will also connect each output pin to an ADC (for example - to measure the res
 ### The benefits of this
 
 - Potentially larger program memory (optional ability to extend CALL/GOTO instruction addresses by 4 bits (12 - 13 bit address in total))
-- Easier reprogrammability - the external chip can be rewritten by a parent microcontroller on the same board. This will free up the MCLR pin. 
+- Easier reprogrammability - the external chip can be rewritten by a parent microcontroller on the same board.  
 It also improves flexibility and development time, since the MCUs could be programmed with the interpreter (and therefore, the PCBS also manufactured)
 before the main application had been written. 
 - Better debugging
