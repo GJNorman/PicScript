@@ -266,37 +266,88 @@ EXECUTE:
 	
 
 	;compare to list of commands
-	CHECK_COMMAND_OC	NextCommand,ADDWF_OC,	    ADDFW_INSTRUCTION
-	CHECK_COMMAND_OC	NextCommand,ANDWF_OC,	    ANDFW_INSTRUCTION
-	CHECK_COMMAND_OC	NextCommand,CLRW_OC,	    CLRW_INSTRUCTION
-	CHECK_COMMAND_OC	NextCommand,COMF_OC,	    COMF_INSTRUCTION
-	CHECK_COMMAND_OC	NextCommand,DECF_OC,	    DECF_INSTRUCTION
-	CHECK_COMMAND_OC	NextCommand,DECFSZ_OC,	    DECFSZ_INSTRUCTION
-	CHECK_COMMAND_OC	NextCommand,INCF_OC,	    INCF_INSTRUCTION
-	CHECK_COMMAND_OC	NextCommand,INCFSZ_OC,	    INCFSZ_INSTRUCTION
-	CHECK_COMMAND_OC	NextCommand,IORWF_OC,	    IORWF_INSTRUCTION
-	CHECK_COMMAND_OC	NextCommand,MOVF_OC,	    MOVF_INSTRUCTION
-	CHECK_COMMAND_OC	NextCommand,RLF_OC,	    RLF_INSTRUCTION
-	CHECK_COMMAND_OC	NextCommand,RRF_OC,	    RRF_INSTRUCTION
-	CHECK_COMMAND_OC	NextCommand,SUBWF_OC,	    SUBWF_INSTRUCTION
-	CHECK_COMMAND_OC	NextCommand,XORWF_OC,	    XORWF_INSTRUCTION
-
-
-    BIT_COMMAND_LIST:
-	CHECK_COMMAND_OC	NextCommand,BCF_OC,	    BCF_INSTRUCTION
-	CHECK_COMMAND_OC	NextCommand,BSF_OC,	    BSF_INSTRUCTION
-	CHECK_COMMAND_OC	NextCommand,BTFSC_OC,	    BTFSC_INSTRUCTION
-	CHECK_COMMAND_OC	NextCommand,BTFSS_OC,	    BTFSS_INSTRUCTION
+	
+	// these commands increment by one
+	// onlt CLRF and CLRW are aliased
+	/*
+	    CLRF_OC	0b00 0001 00 001f ffff 
+	    CLRW_OC	0b00 0001 00 0000 0000
+	    SUBWF_OC	0b00 0010 00 00df ffff
+	    DECF_OC	0b00 0011 00 00df ffff
+	    IORWF_OC	0b00 0100 00 00df ffff
+	    ANDWF_OC	0b00 0101 00 00df ffff
+	    XORWF_OC	0b00 0110 00 00df ffff
+	    ADDWF_OC	0b00 0111 00 00df ffff
+	    MOVF_OC	0b00 1000 00 00df ffff
+	    COMF_OC	0b00 1001 00 00df ffff
+	    INCF_OC	0b00 1010 00 00df ffff
+	    DECFSZ_OC	0b00 1011 00 00df ffff 
+	    RRF_OC	0b00 1100 00 00df ffff
+	    RLF_OC	0b00 1101 00 00df ffff
+	    SWAPF_OC	0b00 1110 00 00df ffff
+	    INCFSZ_OC	0b00 1111 00 00df ffff
+	*/
+	; shift right once, the value is now double the isntructions nominal value
+	rrf NextCommand,W
+	; so we increment the program counter by the instruction value (times 2!)
+	addwf PCL,F
+	goto MOVWF_INSTRUCTION	;adds nothing to program counter
+	goto CLRW_INSTRUCTION
+	goto SUBWF_INSTRUCTION
+	goto DECF_INSTRUCTION
+	goto IORWF_INSTRUCTION
+	goto ANDFW_INSTRUCTION
+	goto XORWF_INSTRUCTION
+	goto ADDFW_INSTRUCTION
+	goto MOVF_INSTRUCTION
+	goto COMF_INSTRUCTION
+	goto INCF_INSTRUCTION
+	goto DECFSZ_INSTRUCTION
+	goto RRF_INSTRUCTION
+	goto RLF_INSTRUCTION
+	goto SWAPF_INSTRUCTION
+	goto INCFSZ_INSTRUCTION
     
+	
     CONTROL_COMMAND_LIST:
-	CHECK_COMMAND_OC	NextCommand,ANDLW_OC,	    ANDLW_INSTRUCTION
-	CHECK_COMMAND_OC	NextCommand,CALL_OC,	    CALL_INSTRUCTION
-	CHECK_COMMAND_OC	NextCommand,GOTO_OC,	    GOTO_INSTRUCTION
-	CHECK_COMMAND_OC	NextCommand,IORLW_OC,	    IORLW_INSTRUCTION
-	CHECK_COMMAND_OC	NextCommand,MOVLW_OC,	    MOVLW_INSTRUCTION
-	CHECK_COMMAND_OC	NextCommand,RETLW_OC,	    RETLW_INSTRUCTION
-	CHECK_COMMAND_OC	NextCommand,XORLW_OC,	    XORLW_INSTRUCTION
-    
+	/*
+			  NextCommand|Arg
+	    ANDLW_OC    0b0000  1110 kkkk kkkk
+	    XORLW_OC    0b0000  1111 kkkk kkkk
+	    IORLW_OC    0b0000  1101 kkkk kkkk
+	    MOVLW_OC    0b0000  1100 kkkk kkkk
+			  
+	    RETLW_OC    0b0000  1000 kkkk kkkk
+	    GOTO_OC	0bkkkk  101k kkkk kkkk
+	    CALL_OC	0bkkkk  1001 kkkk kkkk
+	     
+	     
+	     observations
+	     
+	     CALL, GOTO , RETLW -> call these Program control commands
+			  bit 2 is clear on each
+			  goto has bit 1 set 
+			  call has bit 0 zero 
+	     ANDLW and XORWL -> call these literal type 1 
+			  have bit 1 set 
+			  Andlw has bit 0 clear
+	*/
+	
+	; check for call, goto and retlw instructions
+	btfss NextCommand,2
+	goto PROGRAM_CONTROL_INSTRUCTIONS
+	
+	;check for andlw and xorlw instrucions
+	btfsc NextCommand,1
+	goto ANDLW_AND_XORLW_INSTRUCTIONS
+	
+	;iorlw and movlw instruction
+	btfsc NextCommand,0  
+	goto IORLW_INSTRUCTION
+	goto MOVLW_INSTRUCTION
+
+	
+
     SPECIAL_COMMAND_LIST:
 	//            |Arg starts here
 	// NOP    00 0000 0000
@@ -370,6 +421,10 @@ MOVF_INSTRUCTION:		; complete
     movf INDF, W
     movwf s_WREG
     goto CHECK_DESTINATION
+MOVWF_INSTRUCTION:
+    movf s_WREG
+    movwf INDF
+    goto END_CMD
 NOP_INSTRUCTION:		; complete
     goto END_CMD
    
@@ -380,6 +435,9 @@ RLF_INSTRUCTION:		; complete
 RRF_INSTRUCTION:		; complete
     rrf INDF,F
     goto CHECK_DESTINATION
+SWAPF_INSTRUCTION:
+    swapf INDF,F
+    goto CHECK_DESTINATION
 SUBWF_INSTRUCTION:		; complete
     movf s_WREG,W
     subwf INDF
@@ -389,6 +447,7 @@ XORWF_INSTRUCTION:		; complete
     xorwf INDF
     goto CHECK_DESTINATION
     
+BIT_COMMAND_LIST:
 BCF_INSTRUCTION:
 BSF_INSTRUCTION:  
 BTFSC_INSTRUCTION:
@@ -445,41 +504,52 @@ BTFSS_INSTRUCTION:
 	FINISH_BTFSS:
 	    ;TODO
 	    
-ANDLW_INSTRUCTION:
-    movf Arg,W
-    andwf INDF
-    goto END_CMD
-CALL_INSTRUCTION:
-    // set virtual program counter
-    // OPCODE  0000 1001 kkkk kkkk
-    clrf VPCL_H
-    goto SET_NEW_ADDRESS
-CLRWDT_INSTRUCTION:
+	    
+ANDLW_AND_XORLW_INSTRUCTIONS:
+    btfss NextCommand,0
+    goto XORLW_INSTRUCTION 
+    ANDLW_INSTRUCTION:
+	movf Arg,W
+	andwf INDF
+	goto END_CMD
+
+CLRWDT_INSTRUCTION:	    ; complete
     clrwdt
     goto END_CMD
+PROGRAM_CONTROL_INSTRUCTIONS:
+    ; check for retlw instruction
+    movf NextCommand, W
+    andlw 0b111		    ; lower 3 bits are clear on RETLW instruction
+    btfss STATUS,2	    ; Zero flag indicated RETLW isntruction
+    goto RETLW_INSTRUCTION
 
-GOTO_INSTRUCTION:
-    // set virtual program counter
-    // OPCODE  0000 101k kkkk kkkk
-    // EXT     kkkk 1011 kkkk kkkk - goto
-    //	       kkkk 1001 kkkk kkkk - call
+    ; goto and call instruction will both clear the upper byte of the virutal PCL
     clrf VPCL_H
-    btfsc NextCommand,0
-    incf VPCL_H
-
-    SET_NEW_ADDRESS:
-	swapf NextCommand,W	; if extended address is not used, this will just be zero
-	andlw 0xf
-	addwf VPCL_H,f
-
-	movlw Arg
-	movwf VPCL_L
-
-	goto END_CMD
+    btfss NextCommand,1
+    goto CALL_INSTRUCTION
     
-IORLW_INSTRUCTION:
+    ; otherwise we have a GOTO instruction
+    GOTO_INSTRUCTION:
+	// set virtual program counter
+	// OPCODE  0000 101k kkkk kkkk
+	// EXT     kkkk 1011 kkkk kkkk - goto
+	//	   kkkk 1001 kkkk kkkk - call
+	btfsc NextCommand,0
+	incf VPCL_H
+
+	CALL_INSTRUCTION:
+	    swapf NextCommand,W	; if extended address is not used, this will just be zero
+	    andlw 0xf
+	    addwf VPCL_H,f
+
+	    movlw Arg
+	    movwf VPCL_L
+
+	    goto END_CMD
+    
+IORLW_INSTRUCTION:  ; complete
     movf Arg,W
-    iorlw INDF
+    iorlw s_WREG
     goto END_CMD
     
 MOVLW_INSTRUCTION:
