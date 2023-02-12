@@ -25,6 +25,7 @@ before the main application had been written.
 ### The cons
 - Much slower execution. (estimating) ~50 thousand instruction per second (vs 1 million)
 - Requires about half of available RAM on pic10f202/206 
+- Requires two pins for I2C
 
 at the moment, each instruction is processed as fast as it can be. But this means that each instruction has different timing. I may add some delays later to even these out
 so that execution is more predictable (but slower)
