@@ -1,11 +1,13 @@
 
 #include <xc.inc>
+    
+   
 #include "Opcodes.asm"
 #include "EQU.asm"
 ; CONFIG
   CONFIG  WDTE = OFF            ; Watchdog Timer (WDT enabled)
   CONFIG  CP = OFF              ; Code Protect (Code protection off)
-  CONFIG  MCLRE = ON            ; Master Clear Enable (GP3/MCLR pin function  is MCLR)
+  CONFIG  MCLRE = OFF            ; Master Clear Enable (GP3/MCLR pin function  is MCLR)
  
 ORG 0x0000
 //PSECT   udata_acs
@@ -30,7 +32,18 @@ SDA     MACRO
 
 START_CONDITION MACRO   
 			BSF SDA     ; must be high
+			NOP
+			NOP
+			NOP
+			NOP
+			NOP
+			NOP
                         BSF SCL     ; pulse clock
+			NOP
+			NOP
+			NOP
+			NOP
+			NOP
                         BCF SDA     ; transition to low specifies start/restart condition
                 ENDM
 ;
@@ -45,7 +58,9 @@ START_CONDITION MACRO
 ;           S
 STOP_CONDITION  MACRO   
 			BCF SDA
+			NOP
                         BSF SCL
+			NOP
                         BSF SDA
                 ENDM
 
@@ -66,10 +81,15 @@ call_		MACRO   label
     PSECT   resetVec,class=CODE,reloc=2
 resetVec:
     goto    main
-    PSECT   code
+    ;PSECT   code
     PSECT appcode,class=APP,delta=2 ;this makes the program work, i have no idea why
-ORG 0x000
+;ORG 0x000
 main:
+    movlw 0;0xf & (0<<SCL_PIN | 0<<SDA_PIN)
+    movwf CMCON0    ; disable comparator to enable digital IO
+    TRIS GPIO
+    ;movlw 0x10
+    ;movwf VPCL_L
     goto GET_NEXT_INSTRUCTION
 CHECK_DESTINATION:
     ; only file commands will come here
@@ -104,19 +124,21 @@ GET_NEXT_INSTRUCTION:
     ; grab the first instruction
     movlw slaveI2CAddr	
     call_ I2C_WRITE		; send the slave address
-    
+
     movf VPCL_L, W
     call_ I2C_WRITE		; send program counter
-    movf VPCL_H, W
     
-    call_ I2C_READ		; read command
+   ; movf VPCL_H, W
+   ; call_ I2C_WRITE		; send program counter
+    
+  /*  call_ I2C_READ		; read command
     movf I2C_RR,W		; read register holds our next command 
     movwf NextCommand
     
     call_ I2C_READ		; read arguments
     movf I2C_RR,W		; read register holds our next command argument
     movwf Arg
-    
+    */
     ; end the madness
     STOP_CONDITION
     
@@ -138,38 +160,79 @@ UPDATE_VPCL:
 ; we want I2c 100 Khz, so can have 10 instructions per clock cycle
 
 ;load argument into WREG
+I2C_ERROR:
+    // TODO
+    //STOP_CONDITION
+    // goto GET_NEXT_INSTRUCTION
+
+    
+
+
 I2C_WRITE:
     movwf I2C_WR
+    
+    ; set SDA and SCL as outputs
     movlw 0xf & (0<<SCL_PIN | 0<<SDA_PIN)
     TRIS GPIO
+
+    ; set up our counter
     movlw 8		; address is 7 bits;
     movwf tempReg
     
     START_CONDITION
     
+    // 12 instructions to send one bit
+    // 1Mhz /12 = 80 Khz
 I2C_TX:
-    ; pulse clock low on even, high on odd
-    btfsc tempReg,0
+    
     BCF SCL
-    btfss tempReg,0
-    BSF SCL
-    ; we have spent 4 cycles to get here
+
     ; send a one or zero
     btfsc I2C_WR,7
     BSF SDA
     btfss I2C_WR,7
     BCF SDA
-
-    ; we have spent 8 cycles to get here
     ; I2C_WR <<= 1
     rlf I2C_WR,f	; this will set carry flag if bit 8 was set
-    
+    BSF SCL
+    NOP
+    NOP
     ; if(--tempReg == 0) break;
     decfsz tempReg
-    ; 12 instructions per byte
-    GOTO I2C_TX
     
-    RETLW 0
+    GOTO I2C_TX
+
+
+    I2C_ACK:
+	; change SDA to input so that ACK can be read
+	//movlw 0xf & (1<<SDA_PIN | 0<<SCL_PIN)
+	NOP
+	BCF SCL
+	//TRIS GPIO
+	
+	
+	; wait for ack
+	movlw 0xff
+	movwf tempReg
+	NOP
+	NOP
+	BSF SCL
+	/*WAIT_FOR_ACK:
+	    btfss GPIO, SDA_PIN
+	    goto I2C_EXIT
+	    decfsz tempReg
+	    goto WAIT_FOR_ACK
+	    BCF SCL
+	    ; timeout error
+	    goto I2C_ERROR*/
+	    NOP
+	    NOP
+	    NOP
+	    NOP
+	    NOP
+I2C_EXIT:
+    BCF SCL
+    RETLW 0    
 
 I2C_READ:
     movlw 0xf & (0<<SCL_PIN | 1<<SDA_PIN)
@@ -180,37 +243,34 @@ I2C_READ:
     
     START_CONDITION
 I2C_RX:
-    ; pulse clock low on even, high on odd
-    btfsc tempReg,0
     BCF SCL
-    btfss tempReg,0
-    BSF SCL
-    ; we have spent 4 cycles to get here
+
     ; send a one or zero
-    
+    NOP
     rlf I2C_RR,f
     btfsc SDA	    
     bsf I2C_RR,0
     ; we have spent 7 cycles to get here
-
+    BSF SCL
     ; if(--tempReg == 0) break;
     decfsz tempReg
     ; 10 instructions per byte
     GOTO I2C_TX
     
+    
     RETLW 0
 
 EXECUTE:
     clrf VPCL_Update_Req    
-    /*
-	Check the type of command
-
-	-File oriented
-
-	-Bit oriented
-
-	-literal and Control
-    */
+;
+;Check the type of command
+;;;
+;	-File oriented
+;
+;	-Bit oriented;
+;
+;	-literal and Control
+;   
     
     ; nextCommand contains the upper byte of the instruction
     ; the top nibble of Next Command will be empty
@@ -269,24 +329,25 @@ EXECUTE:
 	
 	// these commands increment by one
 	// onlt CLRF and CLRW are aliased
-	/*
-	    CLRF_OC	0b00 0001 00 001f ffff 
-	    CLRW_OC	0b00 0001 00 0000 0000
-	    SUBWF_OC	0b00 0010 00 00df ffff
-	    DECF_OC	0b00 0011 00 00df ffff
-	    IORWF_OC	0b00 0100 00 00df ffff
-	    ANDWF_OC	0b00 0101 00 00df ffff
-	    XORWF_OC	0b00 0110 00 00df ffff
-	    ADDWF_OC	0b00 0111 00 00df ffff
-	    MOVF_OC	0b00 1000 00 00df ffff
-	    COMF_OC	0b00 1001 00 00df ffff
-	    INCF_OC	0b00 1010 00 00df ffff
-	    DECFSZ_OC	0b00 1011 00 00df ffff 
-	    RRF_OC	0b00 1100 00 00df ffff
-	    RLF_OC	0b00 1101 00 00df ffff
-	    SWAPF_OC	0b00 1110 00 00df ffff
-	    INCFSZ_OC	0b00 1111 00 00df ffff
-	*/
+	                    ;Relevant nibble
+	;    MOVWF_OC	0b00    0000            00 001f ffff
+	;    CLRF_OC	0b00	0001		00 001f ffff 
+	;    CLRW_OC	0b00	0001		00 0000 0000
+	;    SUBWF_OC	0b00	0010		00 00df ffff
+	;    DECF_OC	0b00	0011		00 00df ffff
+	;    IORWF_OC	0b00	0100		00 00df ffff
+	;    ANDWF_OC	0b00	0101		00 00df ffff
+	;    XORWF_OC	0b00	0110		00 00df ffff
+	;    ADDWF_OC	0b00	0111		00 00df ffff
+	;    MOVF_OC	0b00	1000		00 00df ffff
+	;    COMF_OC	0b00	1001		00 00df ffff
+	;    INCF_OC	0b00	1010		00 00df ffff
+	;    DECFSZ_OC	0b00	1011		00 00df ffff 
+	;    RRF_OC	0b00	1100		00 00df ffff
+	;    RLF_OC	0b00	1101		00 00df ffff
+	;    SWAPF_OC	0b00	1110		00 00df ffff
+	;    INCFSZ_OC	0b00	1111		00 00df ffff
+	;
 	; shift right once, the value is now double the isntructions nominal value
 	rrf NextCommand,W
 	; so we increment the program counter by the instruction value (times 2!)
@@ -310,28 +371,28 @@ EXECUTE:
     
 	
     CONTROL_COMMAND_LIST:
-	/*
-			  NextCommand|Arg
-	    ANDLW_OC    0b0000  1110 kkkk kkkk
-	    XORLW_OC    0b0000  1111 kkkk kkkk
-	    IORLW_OC    0b0000  1101 kkkk kkkk
-	    MOVLW_OC    0b0000  1100 kkkk kkkk
-			  
-	    RETLW_OC    0b0000  1000 kkkk kkkk
-	    GOTO_OC	0bkkkk  101k kkkk kkkk
-	    CALL_OC	0bkkkk  1001 kkkk kkkk
-	     
-	     
-	     observations
-	     
-	     CALL, GOTO , RETLW -> call these Program control commands
-			  bit 2 is clear on each
-			  goto has bit 1 set 
-			  call has bit 0 zero 
-	     ANDLW and XORWL -> call these literal type 1 
-			  have bit 1 set 
-			  Andlw has bit 0 clear
-	*/
+;
+;			  NextCommand|Arg
+;	    ANDLW_OC    0b0000  1110 kkkk kkkk
+;	    XORLW_OC    0b0000  1111 kkkk kkkk
+;	    IORLW_OC    0b0000  1101 kkkk kkkk
+;	    MOVLW_OC    0b0000  1100 kkkk kkkk
+;			  
+;	    RETLW_OC    0b0000  1000 kkkk kkkk
+;	    GOTO_OC	0bkkkk  101k kkkk kkkk
+;	    CALL_OC	0bkkkk  1001 kkkk kkkk
+;	     
+;	     
+;	     observations
+;	     
+;	     CALL, GOTO , RETLW -> call these Program control commands
+;			  bit 2 is clear on each
+;			  goto has bit 1 set 
+;			  call has bit 0 zero 
+;	     ANDLW and XORWL -> call these literal type 1 
+;			  have bit 1 set 
+;			  Andlw has bit 0 clear
+;	
 	
 	; check for call, goto and retlw instructions
 	btfss NextCommand,2
@@ -354,19 +415,24 @@ EXECUTE:
 	// CLRWDT 00 0000 0100
 	// OPTION 00 0000 0010
 	// SLEEP  00 0000 0011
-	// TRIS   00 0000 0fff where f = 6 
-	//		      0110
-
-	; we will ignore NOP
+	// TRIS   00 0000 0fff where f = 6 or 7 (for some reason)
+	//		     
+	; bit 2 being set will show that this is either a CLRWDT or a TRIS command
+	movf Arg,F
+	btfsc STATUS,2		    ;Zero Flag indicates NOP
+	goto END_CMD
+	
 	btfsc Arg,2
 	goto OPTION_OR_SLEEP
-
+	
+	
+	
 	OPTION_OR_SLEEP:
-	btfss Arg,0
-	goto OPTION_INSTRUCTION
-	goto SLEEP_INSTRUCTION
+	    btfss Arg,0
+	    goto OPTION_INSTRUCTION
+	    goto SLEEP_INSTRUCTION
 	
-	
+
 // EXECUTE ENDS HERE
 ; ADDFW REG, d
 ADDFW_INSTRUCTION:	    ; complete
@@ -513,9 +579,7 @@ ANDLW_AND_XORLW_INSTRUCTIONS:
 	andwf INDF
 	goto END_CMD
 
-CLRWDT_INSTRUCTION:	    ; complete
-    clrwdt
-    goto END_CMD
+
 PROGRAM_CONTROL_INSTRUCTIONS:
     ; check for retlw instruction
     movf NextCommand, W
@@ -567,6 +631,10 @@ RETLW_INSTRUCTION:
 SLEEP_INSTRUCTION:
     SLEEP
     goto END_CMD
+    
+CLRWDT_INSTRUCTION:	    ; complete
+    clrwdt
+    goto END_CMD	
 TRIS_INSTRUCTION:
     movf Arg,W
     TRIS GPIO
