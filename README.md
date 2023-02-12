@@ -38,4 +38,4 @@ It will read two bytes of data from the host, then increment the virtual address
 
 It will interpret and excute the instruction
 
-There is also the option for adding some custom commands - since we have to send two bytes d
+There is also the option for adding some custom commands - since we pack each 14-bit instruction into 16 bits.
