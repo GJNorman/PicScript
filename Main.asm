@@ -33,18 +33,11 @@ SDA     MACRO
 START_CONDITION MACRO   
 			BSF SDA     ; must be high
 			NOP
-			NOP
-			NOP
-			NOP
-			NOP
-			NOP
                         BSF SCL     ; pulse clock
 			NOP
-			NOP
-			NOP
-			NOP
-			NOP
                         BCF SDA     ; transition to low specifies start/restart condition
+			NOP
+			NOP
                 ENDM
 ;
 ;SDA         ______
@@ -85,11 +78,15 @@ resetVec:
     PSECT appcode,class=APP,delta=2 ;this makes the program work, i have no idea why
 ;ORG 0x000
 main:
-    movlw 0;0xf & (0<<SCL_PIN | 0<<SDA_PIN)
-    movwf CMCON0    ; disable comparator to enable digital IO
+    movlw 0		    
+    movwf CMCON0	    ; disable comparator to enable digital IO
+   
+    ; initialise TMR0
+    MOVLW ~((1<<5)|(1<<6))
+	OPTION; Fosc/4
+    CLRW
     TRIS GPIO
-    ;movlw 0x10
-    ;movwf VPCL_L
+    BCF GPIO, 2
     goto GET_NEXT_INSTRUCTION
 CHECK_DESTINATION:
     ; only file commands will come here
@@ -120,16 +117,22 @@ END_CMD:
     movf s_WREG
     
 GET_NEXT_INSTRUCTION:
-    
-    ; grab the first instruction
+
+    BCF GPIO,2
     movlw slaveI2CAddr	
-    call_ I2C_WRITE		; send the slave address
+    call_ I2C_WRITE_PREP		; send the slave address
+    START_CONDITION
+    call_ I2C_TX
+    
 
     movf VPCL_L, W
-    call_ I2C_WRITE		; send program counter
+    call_ I2C_WRITE_PREP		; send program counter
+    call_ I2C_TX
+
+    movf VPCL_H, W
+    call_ I2C_WRITE_PREP		; send program counter
+    call_ I2C_TX
     
-   ; movf VPCL_H, W
-   ; call_ I2C_WRITE		; send program counter
     
   /*  call_ I2C_READ		; read command
     movf I2C_RR,W		; read register holds our next command 
@@ -145,8 +148,20 @@ GET_NEXT_INSTRUCTION:
     ; increment counter
     call_ UPDATE_VPCL
     
-    goto EXECUTE
+    BSF GPIO, 2
     
+  
+    goto GET_NEXT_INSTRUCTION;EXECUTE
+SLEP:
+    movlw 0xff
+    movwf TMR0
+    
+    DELAY:
+    decfsz TMR0
+    goto DELAY
+    
+    
+    RETLW 0
 UPDATE_VPCL:
     incf VPCL_L, f		; increment the program counter
     incf VPCL_L, f		; by two
@@ -155,34 +170,29 @@ UPDATE_VPCL:
     incf VPCL_H,f		; increment upper byte
     incf VPCL_H,f
     RETLW 0
-; the internal oscialltor runs at 4Mhz, each instruciton takes 4 cycles
-; so we have effectively 1Mhz clock
-; we want I2c 100 Khz, so can have 10 instructions per clock cycle
 
-;load argument into WREG
+
 I2C_ERROR:
-    // TODO
-    //STOP_CONDITION
-    // goto GET_NEXT_INSTRUCTION
 
-    
-
-
-I2C_WRITE:
+   
+I2C_WRITE_PREP:
+    ;load argument from WREG
     movwf I2C_WR
     
     ; set SDA and SCL as outputs
-    movlw 0xf & (0<<SCL_PIN | 0<<SDA_PIN)
+    movlw 0xf & (0<<2 | 0<<SCL_PIN | 0<<SDA_PIN)
     TRIS GPIO
 
     ; set up our counter
     movlw 8		; address is 7 bits;
     movwf tempReg
+ 
+    RETLW 0
     
-    START_CONDITION
     
-    // 12 instructions to send one bit
-    // 1Mhz /12 = 80 Khz
+    
+    // 10 instructions to send one bit
+    // 1Mhz /10 = 100 Khz
 I2C_TX:
     
     BCF SCL
@@ -192,23 +202,25 @@ I2C_TX:
     BSF SDA
     btfss I2C_WR,7
     BCF SDA
-    ; I2C_WR <<= 1
-    rlf I2C_WR,f	; this will set carry flag if bit 8 was set
+    
     BSF SCL
-    NOP
-    NOP
-    ; if(--tempReg == 0) break;
-    decfsz tempReg
+    
+    rlf I2C_WR,f	; I2C_WR <<= 1
+			; this will set carry flag if bit 8 was set
+    
+    
+    decfsz tempReg	; if(--tempReg == 0) break;
     
     GOTO I2C_TX
 
 
     I2C_ACK:
 	; change SDA to input so that ACK can be read
-	//movlw 0xf & (1<<SDA_PIN | 0<<SCL_PIN)
+	
 	NOP
 	BCF SCL
-	//TRIS GPIO
+	;movlw 0xf & (1<<SDA_PIN | 0<<SCL_PIN)
+	;TRIS GPIO
 	
 	
 	; wait for ack
