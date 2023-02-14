@@ -23,7 +23,7 @@ before the main application had been written.
 - Better debugging
 
 ### The cons
-- Much slower execution. (estimating) ~50 thousand instruction per second (vs 1 million)
+- Much slower execution. Just a few percent of what the MCU is otherwise capable
 - Requires about half of available RAM on pic10f202/206 
 - Requires two pins for I2C, but i'm looking into 1-Wire as an alternative
 
@@ -31,7 +31,7 @@ at the moment, each instruction is processed as fast as it can be. But this mean
 so that execution is more predictable (but slower)
 
 ### Applications
-As a learning Tool
+As a learning or debugging Tool
 
 Commercial use in these conditions:
 - ICSP not an option
