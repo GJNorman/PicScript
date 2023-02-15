@@ -33,13 +33,6 @@ so that execution is more predictable (but slower)
 ### Applications
 As a learning or debugging Tool
 
-Commercial use in these conditions:
-- ICSP not an option
-- Cost of external Memory chip not an issue
-- Need more than 512 Instructions
-- Some way of reprogramming external memory chip 
-- Slower execution not an issue
-
 ### How it works
 
 The program has a software I2C implementation (Master mode)
