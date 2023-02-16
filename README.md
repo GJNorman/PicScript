@@ -1,12 +1,12 @@
 # PicScript
-Assembly interpreter for Pic10 Microcontrollers
+Assembly interpreter for Pic10 Microcontrollers, intended for debugging and learning
 
 ### Goals 
 The goal of this project is to have a Pic10f202/206/322 microcontroller (or any with 512 words of FLASH memory) read an assembly instruction over I2C and correctly interpret it
 
 The instructions will be read from either a parent MCU or external memory chip
 
-a secondary goal is to build a debugging tool using an arduino
+The secondary goal is to build a debugging tool using an arduino
 
 The arduino will send a single instruction at a time (sent by the user over serial console)
 
@@ -14,10 +14,12 @@ after each isntruction is completed, the arduino will read the entire RAM conten
 
 It will also connect each output pin to an ADC (for example - to measure the result of any bitbanging), for easier verification of scripts
 
+It's also intended to have the PIC be able to read instructions off of external EEPROM/Flash memory.
+
 ### The benefits of this
 
 - Potentially larger program memory (optional ability to extend CALL/GOTO instruction addresses by 4 bits (12 - 13 bit address in total))
-- Easier reprogrammability - the external chip can be rewritten by a parent microcontroller on the same board.  
+- Easier reprogrammability - the PIC firware can be bundled with a parent microcontroller on the same board (If present)
 It also improves flexibility and development time, since the MCUs could be programmed with the interpreter (and therefore, the PCBS also manufactured)
 before the main application had been written. 
 - Better debugging
@@ -32,6 +34,8 @@ so that execution is more predictable (but slower)
 
 ### Applications
 As a learning or debugging Tool
+
+Commercial tool in very niche applications 
 
 ### How it works
 
@@ -52,6 +56,6 @@ but my goal is to maintain compatibility with the existing instruction OPCODES
 
 ### Current Status
 
-I have written a draft program but have not tested it
+The I2C implementation is working with an arduino. I still need to test that all 35 built in instructions are being interpreted correctly
 
 I will be testing first on the PIC10F206. If this is successful I will move onto the PIC10F322. I plan to attempt to implement Interrupt routines by storing the instructions in RAM
