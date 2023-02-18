@@ -101,7 +101,7 @@ CHECK_DESTINATION:
     ; if this is incorrect, we will return the s_INDF to INDF
     ; an copy to WREG
     btfsc Arg,5	    ; 1 = file, 0 = WREG
-    goto CHECK_VPCL
+    goto END_CMD
     
     ; temp = INDF
     movf INDF
@@ -113,22 +113,12 @@ CHECK_DESTINATION:
     
     ; WREG = temp
     movf tempReg
-    
-; Check If the Virtual Program Counter has been altered 
-; by a conditional command (DECFSZ etc.)
-CHECK_VPCL:
-    movf VPCL_Update_Req,f
-    btfsc STATUS,2
-	call_ UPDATE_VPCL
-	
+    	
 ; Tidy up after completing a generic command
 END_CMD:
-    ;movf s_WREG				; restore WREG
 
-    
-   
 GET_NEXT_INSTRUCTION:
-    BCF GPIO,2
+    ;BCF GPIO,2
     ; setup 16 bit address read with 16 bits data
     movlw 0xff & ( (AddressSize16Bits) | (I2C_Select_READ) | (1<<IncomingSize))
     movwf I2C_CTRL
@@ -142,6 +132,8 @@ GET_NEXT_INSTRUCTION:
     movf VPCL_L,W
     movwf I2C_ADDR_L_REG
     
+    call I2C_READ_2_BYTES
+    goto EXECUTE
 ; Parameters -I2C_ADDRESS_REG
 ;	     -I2C_ADDR_H_REG | I2C_ADDR_L_REG -> 16 bit address    
 I2C_READ_2_BYTES:
@@ -155,42 +147,40 @@ I2C_READ_2_BYTES:
     call_ I2C_TX
     
     ; continue for 16 bit only
-  ;  btfsc I2C_CTRL,AddressSize
-  ;  goto BEGIN_READING
+    btfsc I2C_CTRL, AddressSize
+    goto BEGIN_READING
 
-    movf I2C_ADDR_L_REG, W
-    call_ I2C_WRITE_PREP		; send program counter
-    call_ I2C_TX
-    
+	movf I2C_ADDR_L_REG, W
+	call_ I2C_WRITE_PREP		; send program counter
+	call_ I2C_TX
+
     BEGIN_READING:
     
-    INCF I2C_Adddress_REG,W
-    call_ I2C_WRITE_PREP		; send the slave address
-    START_CONDITION			; send restart condition
-    call_ I2C_TX
-    
-    movlw I2C_ACK_BIT
-    call_ I2C_READ_PREP		; read command
-    call_ I2C_RX
-    
-    movf I2C_RR,W		; read register holds our next command 
-    movwf NextCommand
-    
-    movlw I2C_NACK_BIT
-    call_ I2C_READ_PREP		; read arguments
-    call_ I2C_RX
-    
-    movf I2C_RR,W		; read register holds our next command argument
-    movwf Arg
-    
-    ; end the madness
-    STOP_CONDITION
-    
-    ; increment counter
-    call_ UPDATE_VPCL
+	INCF I2C_Adddress_REG,W
+	call_ I2C_WRITE_PREP		; send the slave address
+	START_CONDITION			; send restart condition
+	call_ I2C_TX
 
-   ; BSF I2C_CTRL,QuickRW	; set quick read for the next instruction to reduce overhead
-    goto  EXECUTE
+	movlw I2C_ACK_BIT
+	call_ I2C_READ_PREP		; read command
+	call_ I2C_RX
+
+	movf I2C_RR,W			; read register holds our next command 
+	movwf NextCommand
+
+	movlw I2C_NACK_BIT
+	call_ I2C_READ_PREP		; read arguments
+	call_ I2C_RX
+
+	movf I2C_RR,W			; read register holds our next command argument
+	movwf Arg
+
+	STOP_CONDITION			; end the madness
+
+	call_ UPDATE_VPCL		; increment counter
+
+       ; BSF I2C_CTRL,QuickRW		; set quick read for the next instruction to reduce overhead
+    RETLW 0
 
 UPDATE_VPCL:
     ;BCF I2C_CTRL,QuickRW	; disable quick read/write, since the address may now be changed
@@ -205,6 +195,7 @@ UPDATE_VPCL:
 I2C_ERROR:
 
    BSF GPIO,2
+   ; TODO
 I2C_WRITE_PREP:
     
     ;load argument from WREG
@@ -334,8 +325,7 @@ I2C_RX:
     BCF SCL
     RETLW 0
 
-EXECUTE:
-    clrf VPCL_Update_Req    
+EXECUTE:  
 ;
 ;Check the type of command
 ;;;
@@ -367,7 +357,7 @@ EXECUTE:
 	
     ; this must be either a file command or a bit command
     ; point to the correct location in ram
-	movwf s_WREG,W			; save WREG to shadow WREG
+	;movwf s_WREG,W			; save WREG to shadow WREG
 
 	movf Arg, W
 	andlw 0b11111	;the file address is the bottom 5 bits
@@ -535,7 +525,7 @@ DECF_INSTRUCTION:		; complete
     goto CHECK_DESTINATION
 DECFSZ_INSTRUCTION:		; complete
     decfsz INDF
-    comf VPCL_Update_Req	; setf VPCL_Update_Req will remain zero if --INDF != 0
+    call UPDATE_VPCL		
     goto CHECK_DESTINATION
 
 INCF_INSTRUCTION:		; complete
@@ -544,7 +534,7 @@ INCF_INSTRUCTION:		; complete
     
 INCFSZ_INSTRUCTION:		; complete
     incfsz INDF
-    comf VPCL_Update_Req
+    call UPDATE_VPCL
     goto CHECK_DESTINATION
     
 IORWF_INSTRUCTION:		; complete
@@ -594,66 +584,74 @@ BTFSS_INSTRUCTION:
     //        0b0000 0110 bbbf ffff BTFSC
     //        0b0000 0111 bbbf ffff BTFSS
     ;FILE &= ~BITS
+   
+    ; set tempReg as bit zero, later we will bit shift it into position
+    clrf tempReg 
+    BSF tempReg,0
     
-    ;find file
-    movf Arg,W
-    andlw 0x1f
-    movwf FSR
-    
-    
-    clrf tempReg
-    INCF tempReg
     ;find bits
     swapf Arg, f
     rrf Arg,W
     andlw 0b111
-    movwf Arg
+    movwf Arg		    ; Arg = 'bbb'
+
+    btfsc STATUS, 2	    ; Zero Flag
+    goto END_FIND_BIT	    ; if Arg == 0, then we can skip the loop
     
-    btfsc STATUS, 2	; check if bit zero is being set/cleared
-    goto SKIP_FIND_BIT
     ; convert the bit number into a bit
     ; 7 -> 1000 0000
+     
     FIND_BIT:
-    rlf tempReg	    ; tempReg = 1 << WREG
-    decfsz Arg
-    goto FIND_BIT
-    
-    SKIP_FIND_BIT:
+	rlf tempReg,f	    ; tempReg = 1 << WREG
+	decfsz Arg	    ; Arg must be > 1 to enter
+	goto FIND_BIT
+
     ; distinguish bit set/clear from bit tests
-    btfss NextCommand,1	    
-    goto FINISH_BIT_TESTS
-    
-    btfss NextCommand,0
-    goto FINISH_BSF
-    ; Bit Clear instruction
-    ;Bits = ~Bits
-    comf tempReg, w
-    ; INDF = INDF & ~BITS
-    andwf INDF,f
-    goto END_CMD
-    
+    END_FIND_BIT:
+	
+	btfsc NextCommand,1	    
+	goto FINISH_BIT_TESTS
+
+	btfsc NextCommand,0
+	goto FINISH_BSF
+	; Bit Clear instruction
+	    ; Bits = ~Bits
+	    comf tempReg, w
+	    ; INDF = INDF & ~BITS
+	    andwf INDF,f
+	    goto END_CMD
+
     FINISH_BSF:
-    
         ; INDF = INDF | BITS
+	movf tempReg,W
 	iorwf  INDF, F
 	goto END_CMD
 	
     FINISH_BIT_TESTS:
-        btfss NextCommand,0
+	; test the bit
+	movf INDF, W
+	andlw tempReg    ; FILE = FILE & BIT
+	; this will set the Zero Flag
+	
+	
+	btfss NextCommand,0 ; check if this is btfsc or btfss
 	goto FINISH_BTFSS
 	; btfsc
+	    btfss STATUS, 2	    ;Zero Flag
+	    call UPDATE_VPCL
+	    goto END_CMD
 	FINISH_BTFSS:
 	    ;TODO
-	    
+	    btfsc STATUS, 2	    ;Zero Flag
+	    call UPDATE_VPCL
+	    goto END_CMD
 	    
 
 ANDLW_INSTRUCTION:
     movf Arg,W
     andwf INDF
     goto END_CMD
-
-
-
+    
 GOTO_INSTRUCTION:
     // set virtual program counter
     // OPCODE	0000 101k kkkk kkkk
@@ -694,8 +692,7 @@ RETLW_INSTRUCTION:
     goto END_CMD
 SLEEP_INSTRUCTION:
     SLEEP
-    ;goto END_CMD
-    
+
 CLRWDT_INSTRUCTION:	    ; complete
     clrwdt
     goto END_CMD	
