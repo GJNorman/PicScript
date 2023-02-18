@@ -2,17 +2,23 @@ SCL_PIN	equ	1
 SDA_PIN equ	0
 LED	equ     2
 
+	
 SFR_registers	equ	8
 userRAM		equ	24
 systemRam	equ     SFR_registers+userRAM
 slaveI2CAddr    equ	0b11001100	; use 8 bits, MS 7 bits are address, last bit should be one (for read command)
 I2C_ACK_BIT	equ     0
 I2C_NACK_BIT	equ	1
+	
+	
+/*
+		RAM allocations
+*/
 tempReg		equ     0+SFR_registers
 /*
 		2 and 3 currently empty
 */
-
+	
 VPCL_H		equ	3+SFR_registers		; virtual program counter high/low
 VPCL_L		equ	4+SFR_registers
 s_WREG		equ	5+SFR_registers		; shadow WREG	
@@ -21,8 +27,9 @@ s_STATUS	equ     7+SFR_registers
 ; for incoming instructions
 NextCommand	equ	8+SFR_registers
 Arg		equ	9+SFR_registers		; file or literal
-VPCL_Update_Req equ	10+SFR_registers
 
+		
+		; register 10 unused
 ;I2C Loading
 I2C_Adddress_REG    equ	    11+SFR_registers
 I2C_ADDR_H_REG	    equ	    12+SFR_registers
